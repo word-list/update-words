@@ -16,6 +16,8 @@ public class Function
     {
         var log = new LambdaContextLogger(context);
 
+        log.Info($"Entering UpdateWords FunctionHandler with {input.Records.Count} record(s)");
+
         var messages = MessageQueues.UpdateWords.Receive(input, log);
 
         var words = messages.Select(message => new Word
@@ -25,9 +27,13 @@ public class Function
             Commonness = message.Commonness,
             Sentiment = message.Sentiment,
             WordTypes = message.WordTypes
-        });
+        }).ToArray();
 
-        await s_wordDb.UpsertWordsAsync([.. words]).ConfigureAwait(false);
+        log.Info($"Upserting {words.Length} word(s).");
+
+        var result = await s_wordDb.UpsertWordsAsync([.. words]).ConfigureAwait(false);
+
+        log.Info($"Finished upserting {words.Length} words.  Modified: {result.ModifiedWordsCount} word(s), {result.ModifiedWordTypesCount} word type(s), {result.ModifiedWordWordTypesCount} word/type relationship(s)");
 
         return "ok";
     }
