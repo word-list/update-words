@@ -1,4 +1,4 @@
-# query-words
+# update-words
 
 ## Description
 
