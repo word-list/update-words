@@ -26,7 +26,12 @@ public class Function
             Offensiveness = message.Offensiveness,
             Commonness = message.Commonness,
             Sentiment = message.Sentiment,
-            WordTypes = message.WordTypes
+            Formality = message.Formality,
+            CulturalSensitivity = message.CulturalSensitivity,
+            Figurativeness = message.Figurativeness,
+            Complexity = message.Complexity,
+            Political = message.Political,
+            WordTypes = message.WordTypes,
         }).ToArray();
 
         log.Info($"Upserting {words.Length} word(s).");
