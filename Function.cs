@@ -20,23 +20,18 @@ public class Function
 
         var messages = MessageQueues.UpdateWords.Receive(input, log);
 
+        var validAttributeList = await WordAttributes.GetAllAsync().ConfigureAwait(false);
+        var validAttributeNames = validAttributeList.Select(a => a.Name).ToHashSet();
+
         var words = messages.Select(message => new Word
         {
             Text = message.Word,
-            Offensiveness = message.Offensiveness,
-            Commonness = message.Commonness,
-            Sentiment = message.Sentiment,
-            Formality = message.Formality,
-            CulturalSensitivity = message.CulturalSensitivity,
-            Figurativeness = message.Figurativeness,
-            Complexity = message.Complexity,
-            Political = message.Political,
-            WordTypes = message.WordTypes,
+            Attributes = message.Attributes.Where(attr => validAttributeNames.Contains(attr.Key)).ToDictionary()
         }).ToArray();
 
         log.Info($"Upserting {words.Length} word(s).");
 
-        var result = await s_wordDb.UpsertWordsAsync([.. words]).ConfigureAwait(false);
+        var result = await s_wordDb.UpsertWordsAsync(words).ConfigureAwait(false);
 
         log.Info($"Finished upserting {words.Length} words.  Modified: {result.ModifiedWordsCount} word(s), {result.ModifiedWordTypesCount} word type(s), {result.ModifiedWordWordTypesCount} word/type relationship(s)");
 
