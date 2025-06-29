@@ -1,12 +1,15 @@
 
+using System.Data;
 using System.Text.Json.Serialization;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.RuntimeSupport;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using Amazon.Lambda.SQSEvents;
 using WordList.Common.Messaging;
-using WordList.Data.Sql;
-using WordList.Data.Sql.Models;
+using WordList.Common.Status;
+using WordList.Common.Status.Models;
+using WordList.Common.Words;
+using WordList.Common.Words.Models;
 
 public class Function
 {
@@ -18,22 +21,29 @@ public class Function
 
         log.Info($"Entering UpdateWords FunctionHandler with {input.Records.Count} record(s)");
 
-        var messages = MessageQueues.UpdateWords.Receive(input, log);
+        var messages = MessageQueues.UpdateWords.Receive(input, log).GroupBy(message => message.CorrelationId);
 
         var validAttributeList = await WordAttributes.GetAllAsync().ConfigureAwait(false);
         var validAttributeNames = validAttributeList.Select(a => a.Name).ToHashSet();
 
-        var words = messages.Select(message => new Word
+        foreach (var group in messages)
         {
-            Text = message.Word,
-            Attributes = message.Attributes.Where(attr => validAttributeNames.Contains(attr.Key)).ToDictionary()
-        }).ToArray();
+            var status = new StatusClient(group.Key);
+            await status.UpdateStatusAsync(SourceStatus.UPDATING).ConfigureAwait(false);
 
-        log.Info($"Upserting {words.Length} word(s).");
+            var words = group.Select(message => new Word
+            {
+                Text = message.Word,
+                Attributes = message.Attributes.Where(attr => validAttributeNames.Contains(attr.Key)).ToDictionary()
+            }).ToArray();
 
-        var result = await s_wordDb.UpsertWordsAsync(words).ConfigureAwait(false);
+            log.Info($"Upserting {words.Length} word(s) for correlation ID {group.Key}.");
 
-        log.Info($"Finished upserting {words.Length} words.  Modified: {result.ModifiedWordsCount} word(s), {result.ModifiedWordTypesCount} word type(s), {result.ModifiedWordWordTypesCount} word/type relationship(s)");
+            var result = await s_wordDb.UpsertWordsAsync(words).ConfigureAwait(false);
+            await status.IncreaseProcessedWordsAsync(result.ModifiedWordsCount).ConfigureAwait(false);
+
+            log.Info($"Finished upserting {words.Length} words for correlation ID |{group.Key}.  Modified: {result.ModifiedWordsCount} word(s), {result.ModifiedWordTypesCount} word type(s), {result.ModifiedWordWordTypesCount} word/type relationship(s)");
+        }
 
         return "ok";
     }
